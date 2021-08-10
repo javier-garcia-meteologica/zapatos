@@ -279,6 +279,21 @@ export const sql: SqlSignatures = (literals: TemplateStringsArray, ...expression
   return new SQLFragment<pg.QueryResult['rows'], never>(Array.prototype.slice.apply(literals), expressions);
 };
 
+export function escapeIdentifier (identifier: string | number): string {
+  return `"${String(identifier).replace(/"/g, '""')}"`;
+}
+
+export function unescapeIdentifier (escapedIdentifier: string): string {
+  if (escapedIdentifier.charAt(0) === '"') {
+    const innerEscapedIdentifier = escapedIdentifier.charAt(escapedIdentifier.length - 1) === '"'
+      ? escapedIdentifier.slice(1, -1)
+      : escapedIdentifier.slice(1);
+    return innerEscapedIdentifier.replace(/""/g, '"');
+  } else {
+    return escapedIdentifier;
+  }
+}
+
 let preparedNameSeq = 0;
 
 export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never> {
@@ -372,7 +387,10 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
 
     } else if (typeof expression === 'string') {
       // if it's a string, it should be a x.Table or x.Column type, so just needs quoting
-      result.text += expression.charAt(0) === '"' ? expression : `"${expression}"`;
+      // Re-escape identifier even if it "seems" to be already escaped. A malicious user
+      // could pass a string that starts with " but injects SQL code. Only trust escaped
+      // identifiers that we escape ourselves.
+      result.text += escapeIdentifier(unescapeIdentifier(expression));
 
     } else if (expression instanceof DangerousRawString) {
       // Little Bobby Tables passes straight through ...
@@ -413,19 +431,19 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
     } else if (expression === self) {
       // alias to the latest column, if applicable
       if (!currentColumn) throw new Error(`The 'self' column alias has no meaning here`);
-      result.text += `"${currentColumn}"`;
+      result.text += escapeIdentifier(currentColumn);
 
     } else if (expression instanceof ParentColumn) {
       // alias to the parent table (plus supplied column name) of a nested query, if applicable
       if (!parentTable) throw new Error(`The 'parent' table alias has no meaning here`);
-      result.text += `"${parentTable}"."${expression.value}"`;
+      result.text += `${escapeIdentifier(parentTable)}.${escapeIdentifier(expression.value)}`;
 
     } else if (expression instanceof ColumnNames) {
       // a ColumnNames-wrapped object -> quoted names in a repeatable order
       // OR a ColumnNames-wrapped array -> quoted array values
       const columnNames = Array.isArray(expression.value) ? expression.value :
         Object.keys(expression.value).sort();
-      result.text += columnNames.map(k => `"${k}"`).join(', ');
+      result.text += columnNames.map(k => escapeIdentifier(k)).join(', ');
 
     } else if (expression instanceof ColumnValues) {
       // a ColumnValues-wrapped object OR array 
@@ -474,7 +492,7 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
             result.text += ')';
 
           } else {
-            result.text += `"${columnName}" = `;
+            result.text += `${escapeIdentifier(columnName)} = `;
             this.compileExpression(columnValue instanceof ParentColumn ? columnValue : new Parameter(columnValue),
               result, parentTable, columnName);
           }
