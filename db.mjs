@@ -51,7 +51,6 @@ export const sql = mod.sql;
 export const strict = mod.strict;
 export const sum = mod.sum;
 export const table = mod.table;
-export const tables = mod.tables;
 export const toBuffer = mod.toBuffer;
 export const toDate = mod.toDate;
 export const toString = mod.toString;
