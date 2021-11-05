@@ -8,7 +8,7 @@ import type * as pg from 'pg';
 import { performance } from 'perf_hooks';
 
 import { getConfig, SQLQuery } from './config';
-import { isPOJO, NoInfer } from './utils';
+import { isPOJO, NoInfer, trimObj } from './utils';
 
 import type {
   Updatable,
@@ -362,7 +362,7 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
       // a ColumnNames-wrapped object -> quoted names in a repeatable order
       // OR a ColumnNames-wrapped array -> quoted array values
       const columnNames = Array.isArray(expression.value) ? expression.value :
-        Object.keys(expression.value).sort();
+        Object.keys(trimObj(expression.value)).sort();
       result.text += columnNames.map(k => `"${k}"`).join(', ');
 
     } else if (expression instanceof ColumnValues) {
@@ -380,7 +380,7 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
 
       } else {
         const
-          columnNames = <Column[]>Object.keys(expression.value).sort(),
+          columnNames = <Column[]>Object.keys(trimObj(expression.value)).sort(),
           columnValues = columnNames.map(k => (<any>expression.value)[k]);
 
         for (let i = 0, len = columnValues.length; i < len; i++) {
@@ -397,7 +397,7 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
 
     } else if (typeof expression === 'object') {
       // must be a Whereable object, so put together a WHERE clause
-      const columnNames = <Column[]>Object.keys(expression).sort();
+      const columnNames = <Column[]>Object.keys(trimObj(expression)).sort();
 
       if (columnNames.length) {  // if the object is not empty
         result.text += '(';
@@ -412,7 +412,8 @@ export class SQLFragment<RunResult = pg.QueryResult['rows'], Constraint = never>
             result.text += ')';
 
           } else {
-            result.text += `"${columnName}" = `;
+            const assignOperator = columnValue === null ? 'IS' : '=';
+            result.text += `"${columnName}" ${assignOperator} `;
             this.compileExpression(columnValue instanceof ParentColumn ? columnValue : new Parameter(columnValue),
               result, parentTable, columnName);
           }
