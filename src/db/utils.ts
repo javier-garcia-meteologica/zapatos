@@ -44,6 +44,16 @@ export const mapWithSeparator = <TIn, TSep, TOut>(
 };
 
 /**
+ * Removes undefined keys from an object.
+ *
+ * @param obj The object to trim
+ */
+export const trimObj = <T extends object>(obj: T): T => {
+	const definedEntries = Object.entries(obj).filter(([, value]) => value !== undefined);
+	return Object.fromEntries(definedEntries) as T;
+};
+
+/**
  * Map an array of objects to an output array by taking the union of all objects' keys
  * and ensuring that any key not present on any object gets a default value. 
  * 
@@ -51,10 +61,11 @@ export const mapWithSeparator = <TIn, TSep, TOut>(
  * @param objs The array of objects
  * @param defaultValue The default value to assign to missing keys for each object
  */
-export const completeKeysWithDefaultValue = <T extends object>(objs: T[], defaultValue: any): T[] => {
-  const unionKeys = Object.assign({}, ...objs);
-  for (const k in unionKeys) unionKeys[k] = defaultValue;
-  return objs.map(o => ({ ...unionKeys, ...o }));
+export const completeKeysWithDefaultValue = <T extends object>(objs: readonly T[], defaultValue: any): T[] => {
+	const trimmedObjs: readonly T[] = objs.map(obj => trimObj(obj));
+	const unionKeys: T = Object.assign({}, ...trimmedObjs);
+	for (const k in unionKeys) unionKeys[k] = defaultValue;
+	return trimmedObjs.map(o => ({ ...unionKeys, ...o }));
 };
 
 /**
